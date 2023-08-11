@@ -28,12 +28,14 @@ module OmniAuth
       option :identifier, nil
       option :identifier_param, 'openid_url'
       option :trust_root, nil
+      option :realm_domain, nil
 
       def dummy_app
         lambda{|env| [401, {"WWW-Authenticate" => Rack::OpenID.build_header(
           :identifier => identifier,
           :return_to => callback_url,
           :trust_root => options.trust_root || %r{^(https?://[^/]+)}.match(callback_url) {|m| m[1]},
+          :realm_domain => options.realm_domain,
           :required => options.required,
           :optional => options.optional,
           :method => 'post'
@@ -45,7 +47,7 @@ module OmniAuth
         i = nil if i == ''
         i
       end
-      
+
       def request_phase
         identifier ? start : get_identifier
       end
@@ -79,7 +81,12 @@ module OmniAuth
       end
 
       def callback_phase
-        return fail!(:invalid_credentials) unless openid_response && openid_response.status == :success
+        env['HTTP_HOST'] = options[:realm_domain] if options[:realm_domain].present?
+        # return fail!(:invalid_credentials) unless openid_response && openid_response.status == :success
+        unless openid_response && openid_response.status == :success
+          Rails.logger.error("omniauth: (steam) Callback phase failed: #{openid_response.message}")
+          return fail!(:invalid_credentials)
+        end
         super
       end
 
